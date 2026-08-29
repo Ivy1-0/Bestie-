@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Besties Chaoda — Pixel Cat</title>
+<style>
+  :root {
+    --bg-color: #dff1f7;
+    --bubble-border: #2b6ea8;
+    --text: #2b3a4a;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    box-sizing: border-box;
+    background-color: var(--bg-color);
+    font-family: "Courier New", "Consolas", monospace;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* pixel-style speech bubble */
+  .bubble {
+    position: relative;
+    background: #ffffff;
+    border: 4px solid var(--bubble-border);
+    padding: 10px 18px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text);
+    white-space: nowrap;
+    margin-bottom: 4px;
+    animation: floatBubble 2.6s steps(6) infinite;
+    box-shadow:
+      4px 4px 0 rgba(43,110,168,0.15);
+  }
+
+  /* stepped pixel "tail" under the bubble */
+  .bubble::after {
+    content: "";
+    position: absolute;
+    bottom: -12px;
+    left: 30px;
+    width: 12px;
+    height: 8px;
+    background: var(--bubble-border);
+  }
+  .bubble::before {
+    content: "";
+    position: absolute;
+    bottom: -18px;
+    left: 34px;
+    width: 6px;
+    height: 6px;
+    background: var(--bubble-border);
+    z-index: 1;
+  }
+
+  @keyframes floatBubble {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+
+  canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bubble">besties chaoda</div>
+    <canvas id="cat" width="400" height="480"></canvas>
+  </div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('cat');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const PX = 20;          // size of one "pixel"
+  const CAT_START_ROW = 8; // rows above the cat left empty for hearts/breathing room
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const COLORS = {
+    '.': null,
+    'o': '#d9d9d9', // outline
+    'f': '#fbfbfb', // fur
+    's': '#e7e7e7', // fur shade
+    'p': '#f3b6c4', // inner ear pink
+    'b': '#2b6ea8', // eyeball
+    'n': '#f0a9b8'  // nose
+  };
+
+  // 8-char left half of each of the 16 cat rows; mirrored automatically to build a 16-wide row
+  const LEFT = [
+    "..o.....", // 0 ear tip
+    ".ofo....", // 1 ear
+    "ofppo...", // 2 ear base + inner pink
+    "....offo", // 3 head top
+    "...offff", // 4 head
+    "..offfff", // 5 head
+    "..offbff", // 6 eyes
+    "..offbff", // 7 eyes
+    "..offffn", // 8 nose
+    "...offff", // 9 chin
+    "....offf", // 10 chin
+    "..offfff", // 11 shoulders
+    ".offffff", // 12 body
+    ".offffff", // 13 body
+    ".ossssss", // 14 body shade
+    "..ff...."  // 15 paws
+  ];
+
+  // extra 4 columns (16-19) on the right only, for the tail
+  const TAIL = Array(16).fill("....");
+  TAIL[9]  = "f...";
+  TAIL[10] = "ff..";
+  TAIL[11] = ".ff.";
+  TAIL[12] = ".ff.";
+  TAIL[13] = "ff..";
+  TAIL[14] = "f...";
+
+  function fullRow(r) {
+    const left = LEFT[r];
+    const mirrored = left.split('').reverse().join('');
+    return left + mirrored + TAIL[r];
+  }
+
+  const ROWS = LEFT.map((_, r) => fullRow(r));
+
+  // ---- hearts ----
+  let hearts = [];
+  const HEART_PATTERN = [
+    ".x.x.",
+    "xxxxx",
+    "xxxxx",
+    ".xxx.",
+    "..x.."
+  ];
+  let lastHeartSpawn = 0;
+
+  function spawnHeart(time) {
+    hearts.push({
+      x: W * 0.62 + (Math.random() * 20 - 10),
+      y: CAT_START_ROW * PX - 4,
+      born: time
+    });
+  }
+
+  function drawHearts(time) {
+    hearts = hearts.filter(h => (time - h.born) < 1600);
+    for (const h of hearts) {
+      const t = (time - h.born) / 1600; // 0..1
+      const alpha = 1 - t;
+      const scale = 0.7 + 0.25 * Math.sin(t * Math.PI * 3);
+      const cell = 5 * scale;
+      const yOff = t * 60;
+      ctx.globalAlpha = Math.max(alpha, 0);
+      ctx.fillStyle = '#dc4053';
+      for (let r = 0; r < HEART_PATTERN.length; r++) {
+        for (let c = 0; c < HEART_PATTERN[r].length; c++) {
+          if (HEART_PATTERN[r][c] === 'x') {
+            ctx.fillRect(
+              h.x + c * cell,
+              h.y - yOff + r * cell,
+              cell + 0.5,
+              cell + 0.5
+            );
+          }
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---- main draw loop ----
+  let blinkUntil = 0;
+  let nextBlink = 2000;
+
+  function draw(time) {
+    // background
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#dff1f7';
+    ctx.fillRect(0, 0, W, H);
+
+    // idle bob
+    const bob = Math.sin(time / 480) * 2;
+    // ear wiggle
+    const earWiggle = Math.sin(time / 260) * 3;
+    // tail sway
+    const tailSway = Math.sin(time / 340) * 4;
+
+    // blink handling
+    if (time > nextBlink) {
+      blinkUntil = time + 130;
+      nextBlink = time + 2400 + Math.random() * 1800;
+    }
+    const blinking = time < blinkUntil;
+
+    for (let r = 0; r < 16; r++) {
+      let rowStr = ROWS[r];
+      if (blinking && (r === 6 || r === 7)) {
+        rowStr = rowStr.split('b').join('f');
+      }
+      let yBase = CAT_START_ROW * PX + r * PX + bob;
+      if (r <= 2) yBase += earWiggle;
+
+      for (let c = 0; c < rowStr.length; c++) {
+        const ch = rowStr[c];
+        const color = COLORS[ch];
+        if (!color) continue;
+        let x = c * PX;
+        if (c >= 16 && r >= 9 && r <= 14) x += tailSway;
+        ctx.fillStyle = color;
+        ctx.fillRect(x, yBase, PX, PX);
+      }
+    }
+
+    if (time - lastHeartSpawn > 1300) {
+      spawnHeart(time);
+      lastHeartSpawn = time;
+    }
+    drawHearts(time);
+
+    requestAnimationFrame(draw);
+  }
+
+  requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>
